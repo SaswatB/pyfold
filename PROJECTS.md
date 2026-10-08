@@ -1,104 +1,113 @@
-# Many-to-many projects
+# Modules across files
 
-A project consists of any number of `.fold` files plus an optional project map.
-Each authoring file starts with `#!pyfold project 1` and contains explicit module
-fragments:
+Use the same language and commands for a file or a directory. No mode or header is
+needed. Any authoring file can contain ordinary declarations, explicit module
+blocks, or both. The compiler collects module contributions across every supplied
+`.fold` file before expanding Python.
+
+Ordinary code gets its module from the relative authoring path:
 
 ```text
-#!pyfold project 1
+# app/users.fold → app/users.py
+val PREFIX = 'user:'
+```
+
+An explicit declaration in any other file contributes to that same module:
+
+```text
+# features.fold
 module "app/users.py" part 10 {
     fun find_user(id) = PREFIX + str(id)
 }
-
-module "app/orders.py" part 20 {
+module "app/orders.py" {
+    from .users import find_user
     fun order_for_user(id) = find_user(id)
 }
 ```
 
-Other authoring files can supply additional fragments for these same modules.
-The tuple `(module path, part number)` is the fragment's explicit identity/order.
-Part numbers are unique nonnegative integers within each module; gaps are allowed.
-They can be repeated across different modules. Duplicate numbers within a module
-are an error, even if their contents are identical. Sort order is numeric, so part
-2 precedes part 10. Authoring filenames and fragment discovery order have no effect
-on generated Python order.
+`app/users.fold` doesn't need a declaration, setting, or header because another file
+contributes a module block. The result is `app/users.py` with its global followed by
+its function, plus `app/orders.py`. There is no `features.py` unless that file also
+contains unwrapped code. Explicit blocks affect only their contents, never silently
+reassign neighboring or unrelated code to another module.
 
-Use arbitrary `.fold` filenames to group related concepts. Moving an entire module
-block between authoring files does not require any map changes. Splitting/merging
-blocks also works, provided the parts assemble to the same Python AST. The baseline
-converter numbers top-level statements 0, 10, 20, ... to leave insertion room.
+## Ordering
 
-Each fragment must contain complete top-level statements. Functions and classes
-can move between authoring files but cannot yet be split internally across parts.
-Module-level imports, globals, decorators and initialization statements remain in
-their original Python module, in explicit part order. Relative imports, package
-`__init__.py` files, module docstrings and future imports retain Python semantics.
-Imports aren't automatically renamed or inferred; invalid future-import placement
-is rejected during whole-module compilation. No new cross-module execution order
-is introduced: Python's own import/runtime machinery governs that.
+Unwrapped statements in a file form part 0 of its implicit module, preserving their
+source order. Explicit blocks default to part 0; use `part N` to specify ordering
+when a module has several contributions. Part numbers are unique nonnegative
+integers per module and are sorted numerically. Gaps are allowed. Duplicate parts
+are errors; the compiler doesn't guess order from filenames or scan order.
+
+An explicit block extending an implicit module therefore uses a different part,
+usually `part 10`. To put something before unwrapped code, move that code into a
+block with a later part number. Moving explicit blocks between files preserves
+module identity and order. Moving unwrapped code changes its default module with
+its filename. Each contribution contains complete top-level statements; splitting
+inside a function or class is not implemented.
+
+Imports, globals and initialization remain in the assembled Python module. Relative
+imports and packages use normal Python execution semantics. No automatic import
+rewriting or new cross-module initialization order is introduced. The compiler
+checks the assembled module, including future-import placement and cross-part `val`
+constraints.
 
 ## Commands
 
-Convert all `.py` files under a source tree:
-
 ```sh
-python -m pyfold project fold python-src -o authoring
+# A deterministic baseline: ordinary files, no wrappers or headers.
+python -m pyfold fold python-src -o authoring
+
+# Validate file sets, expanded ASTs, and exact source reconstruction.
+python -m pyfold check authoring --map authoring/project.map.json --against python-src --json
+
+# Compile from the visible source, or restore with metadata.
+python -m pyfold unfold authoring -o canonical-python
+python -m pyfold unfold authoring --map authoring/project.map.json -o restored-python
+
+# Refresh reconstruction metadata for an equivalent organization.
+python -m pyfold rebind authoring --against python-src -o refreshed.map.json
 ```
 
-This generates corresponding `.fold` paths with movable fragments, plus
-`authoring/project.map.json`. Baseline output is one-to-one by default; the format
-supports many-to-many immediately. Non-Python assets are not copied. `.git`, `.venv`,
-`venv` and `__pycache__` directories are excluded. Symlink inputs are rejected.
+Directory `fold` emits matching `.fold` files plus `project.map.json`. Reorganize
+code into explicit blocks when useful, without converting the other files. An
+individual `.fold` file containing module blocks uses the same `unfold` command
+and writes a directory containing its modules. A plain individual file still
+writes one Python output file. Pass a directory when resolving contributions from
+multiple files: the compiler doesn't silently scan outside the supplied input.
 
-Compile standalone or reconstruct with a map:
+`check python-src` without a map verifies a fresh deterministic round trip, just as
+`check original.py` does. Authoring-pair checks require a map; `--against` adds the
+independent original. Old `project ...` command spellings and headers remain
+compatibility aliases; they aren't required to use modules.
 
-```sh
-python -m pyfold project unfold authoring -o canonical-python
-python -m pyfold project unfold authoring --map authoring/project.map.json -o restored-python
-```
+## Checks and file handling
 
-Outputs must be new/empty directories disjoint from the input tree. This avoids
-silently keeping stale Python modules after a module is removed. Invalid input is
-validated before writing. Filesystem write failures can still leave partial output;
-use a fresh destination when retrying. Paths must be relative POSIX `.py` paths.
-Absolute paths, traversal, duplicate parts and case/parent-file collisions fail.
+The result includes `module_set_matches_map`, `original_file_set_matches`, and each
+module's `pair_consistent`, `original_ast_matches`, and `exact_reconstruction`.
+Missing, extra or renamed modules fail the set checks. A removed or reordered
+statement fails the corresponding original-AST check. An empty ordinary file
+represents an empty Python module; an explicit-only file creates just its declared
+modules. `rebind` requires the same module path set and ASTs as the independent
+original and never changes that original.
 
-Check the entire file set and each module against the independent original tree:
+Only `.py` / `.fold` inputs are collected. Non-Python assets are not copied. `.git`,
+`.venv`, `venv`, and `__pycache__` are ignored. Symlink inputs are rejected. Outputs
+must be new/empty and disjoint from inputs to avoid silently retaining stale files.
+Paths must be relative POSIX `.py` paths; traversal and case/parent-file collisions
+fail. Validation precedes writes, but filesystem errors can leave partial output;
+retry with a fresh directory.
 
-```sh
-python -m pyfold project check authoring --map authoring/project.map.json --against python-src --json
-```
+## Example
 
-The JSON result includes `module_set_matches_map`, `original_file_set_matches`, and
-per-module `pair_consistent`, `original_ast_matches`, and `exact_reconstruction`.
-`ok` requires every requested check to pass. Missing, added or renamed Python paths
-fail the file-set checks. Removing a fragment while retaining its module is detected
-by the module's original-AST check. Without `--against`, consistency does not prove
-preservation of an independent original. An empty module needs an explicit empty
-module block; omitting it means the module does not exist.
-
-Generate fresh metadata after reorganizing the view:
-
-```sh
-python -m pyfold project rebind authoring --against python-src -o refreshed.map.json
-```
-
-Rebinding requires the exact same module path set and ASTs as the original. Like
-single-file rebinding, it produces whole-module reconstruction recipes. No routing
-or execution order lives in the map. For semantic module additions/removals, compile
-standalone first and establish an explicitly updated original before rebinding.
-
-## Working example
-
-[`examples/project/views`](examples/project/views) maps three Python files onto two
-PyFold files. `entities.fold` holds functions from both `store/users.py` and
-`store/orders.py`; `wiring.fold` supplies their globals/imports and the package file.
-Thus both substantive Python modules draw from both authoring files.
+[`examples/project/views`](examples/project/views) groups functions from two modules
+in `entities.fold` and their setup in `wiring.fold`, with a package module as well.
+The tests also cover mixed implicit/explicit files and blocks alongside ordinary
+code. Run:
 
 ```sh
-python -m pyfold project check examples/project/views --map examples/project/project.map.json --against examples/project/python --json
+python -m pyfold check examples/project/views --map examples/project/project.map.json --against examples/project/python --json
 ```
 
-No Python code executes during conversion or checking. Existing single-file v1/v2
-commands are unchanged. This release adds project organization and verification;
-it does not introduce new map semantics or claim a stronger security boundary.
+No input program is executed during translation or checking. Existing map behavior
+is unchanged; this feature is about source organization and resolution.

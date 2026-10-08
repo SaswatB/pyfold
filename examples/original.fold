@@ -1,4 +1,3 @@
-#!pyfold 2
 fun active_names(users) = [user.name.strip() for user in users if user.active]
 
 fun greet(name: str, excited: bool=false): str {

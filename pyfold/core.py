@@ -11,7 +11,7 @@ import io
 import re
 import tokenize
 from dataclasses import dataclass
-from .syntax import HEADER, Parser, SyntaxErrorV2, emit_statement
+from .syntax import HEADER, Parser, SyntaxErrorV2, emit_statement, lex
 
 
 class FoldError(ValueError):
@@ -104,7 +104,13 @@ def _header(line: str) -> tuple[str, str, str]:
 
 
 def parse(view: str) -> list[Unit]:
-    if view.startswith(HEADER) or re.match(r'\s*(?:async\s+)?fun\s', view):
+    try:
+        significant = [t.text for t in lex(view) if t.kind not in ('newline', 'eof')]
+    except SyntaxErrorV2 as exc:
+        raise FoldError(str(exc)) from exc
+    legacy = any(significant[i] == 'fn' and i + 2 < len(significant) and significant[i+2] == '('
+                 for i in range(len(significant))) or view.lstrip().startswith('//')
+    if view.startswith(HEADER) or not legacy:
         try:
             return [Unit(v, p) for v, p in Parser(view).units()]
         except (SyntaxErrorV2, SyntaxError) as exc:

@@ -39,10 +39,10 @@ Do not optimize character counts at the expense of clarity.
 
 ## Boundaries
 
-For many-to-many projects, use the `project fold/check/rebind/unfold` commands in
+For many-to-many projects, use the same `fold/check/rebind/unfold` commands on an input directory in
 [PROJECTS.md](PROJECTS.md). Move entire module fragments between authoring files;
 preserve explicit Python paths and numeric part order. Verify the complete original
-Python tree with `project check --against`, not only the module you edited. Keep
+Python tree with `check --against`, not only the module you edited. Keep
 functions/classes intact within fragments; internal splitting is not implemented.
 
 A `val` can replace a one-write `var`; it cannot silently rename a binding or

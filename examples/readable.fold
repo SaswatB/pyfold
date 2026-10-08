@@ -1,4 +1,3 @@
-#!pyfold 2
 # Same Python expansion as original.py; choose clarity over minimum length.
 fun active_names(users) {
     return [user.name.strip() for (user in users) if (user.active)]

@@ -38,7 +38,9 @@ def rebind(view, original):
     if fingerprint(canonical) != fingerprint(original):
         raise FoldError('Cannot rebind: expansion differs from the original Python AST')
     compile(original, '<pyfold-original>', 'exec')
-    version = 2 if view.startswith(HEADER) or view.lstrip().startswith(('fun ', 'async fun ')) else 1
+    from .syntax import lex
+    tokens = [t.text for t in lex(view) if t.kind not in ('newline', 'eof')]
+    version = 1 if tokens[:1] == ['fn'] or tokens[:2] == ['async', 'fn'] else 2
     body = view[len(HEADER):].lstrip('\r\n') if view.startswith(HEADER) else view
     body = body.rstrip('\r\n')
     normalized = (HEADER + '\n' if version == 2 else '') + body + '\n'

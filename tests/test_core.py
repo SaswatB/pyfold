@@ -100,7 +100,7 @@ class RoundTrips(unittest.TestCase):
 
     def test_invalid_syntax(self):
         for view in ["fn f() =>", "fn f() {", "```python\nx = 1",
-                     "fn f() => 1; print(2)", "fn f() {\nlet return 1\n}", "wat"]:
+                     "fn f() => 1; print(2)", "fn f() {\nlet return 1\n}", "var ="]:
             with self.subTest(view=view), self.assertRaises((FoldError, SyntaxError)):
                 unfold(view)
 

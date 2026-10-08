@@ -153,6 +153,9 @@ fun retry(fetch) {
         view, metadata = fold(source, legacy=True)
         self.assertTrue(view.startswith('fn '))
         self.assertEqual(unfold(view, metadata), source)
+        source = 'import os\ndef f():\n return os.name\n'
+        view, metadata = fold(source, legacy=True)
+        self.assertEqual(unfold(view, metadata), source)
 
     def test_fallback(self):
         source = '@decorator\ndef f(x):\n return x\n'

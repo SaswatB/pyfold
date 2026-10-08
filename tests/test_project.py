@@ -141,3 +141,49 @@ class Projects(unittest.TestCase):
                 write_tree(root/'input'/'output', {'x.py': ''}, [root/'input'])
             with self.assertRaises(FoldError):
                 write_tree(root, {'../x.py': ''})
+
+    def test_implicit_and_explicit_files_share_modules(self):
+        sources = {'app/users.py': 'PREFIX="u:"\ndef f(x):\n return PREFIX + str(x)\n',
+                   'app/orders.py': 'from .users import f\ndef g(x):\n return f(x)\n'}
+        _, metadata = fold_project(sources)
+        views = {
+            'app/users.fold': 'val PREFIX = "u:"\n',
+            'app/orders.fold': 'from .users import f\n',
+            'features.fold': 'module "app/users.py" part 10 { fun f(x) = PREFIX + str(x) }\n'
+                             'module "app/orders.py" part 10 { fun g(x) = f(x) }\n',
+        }
+        self.assertTrue(check_project(views, metadata, sources)['ok'])
+        self.assertNotIn('features.py', expand_project(views))
+
+    def test_mixed_file_and_optional_part(self):
+        views = {'a.fold': 'var x = 1\nmodule "b.py" { fun b() = 2 }\nfun a() = x\n'}
+        result = expand_project(views)
+        self.assertEqual(set(result), {'a.py', 'b.py'})
+        self.assertEqual(fingerprint(result['a.py']), fingerprint('x=1\ndef a():\n return x'))
+        self.assertEqual(fingerprint(result['b.py']), fingerprint('def b():\n return 2'))
+
+    def test_implicit_conflict_is_not_arbitrary_ordering(self):
+        with self.assertRaises(FoldError):
+            expand_project({'a.fold': 'var x=1', 'b.fold': 'module "a.py" {var x=2}'})
+
+    def test_normal_commands_on_directory_and_explicit_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_tree(root/'original', self.sources)
+            def cli(*args):
+                return subprocess.run([sys.executable, '-m', 'pyfold', *map(str,args)], capture_output=True, text=True)
+            result = cli('fold', root/'original', '-o', root/'views')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('module ', (root/'views/pkg/users.fold').read_text())
+            self.assertNotIn('#!pyfold', (root/'views/pkg/users.fold').read_text())
+            result = cli('check', root/'original', '--json')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = cli('check', root/'views', '--map', root/'views/project.map.json', '--against', root/'original', '--json')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = cli('unfold', root/'views', '--map', root/'views/project.map.json', '-o', root/'restored')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            (root/'bundle.fold').write_text('module "one.py" {fun one() = 1}\nmodule "two.py" {fun two() = 2}\n')
+            result = cli('unfold', root/'bundle.fold', '-o', root/'bundle-out')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((root/'bundle-out/one.py').is_file())
+            self.assertTrue((root/'bundle-out/two.py').is_file())

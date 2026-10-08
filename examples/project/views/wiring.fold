@@ -1,4 +1,3 @@
-#!pyfold project 1
 module "store/__init__.py" part 0 {
 }
 

@@ -53,13 +53,26 @@ def main():
         if args.command == 'project':
             from .project import project_cli
             return project_cli(args)
+        from .project import project_cli, has_module_blocks
+        if Path(args.source).is_dir():
+            if getattr(args, 'legacy', False):
+                raise FoldError('--legacy is only supported for a single Python file')
+            if args.command == 'fold' and args.map_path:
+                raise FoldError('Directory conversion writes project.map.json inside the output directory')
+            args.operation = args.command
+            return project_cli(args)
         source = read(args.source)
+        if args.command != 'fold' and Path(args.source).suffix == '.fold':
+            metadata = json.loads(read(args.map_path)) if getattr(args, 'map_path', None) else None
+            if has_module_blocks(source) or (isinstance(metadata, dict) and metadata.get('kind') == 'pyfold-project'):
+                args.operation = args.command
+                return project_cli(args)
         if args.command == "fold":
             view, metadata = fold(source, legacy=args.legacy)
             map_path = args.map_path or args.output + ".map.json"
             if len({Path(p).resolve() for p in (args.source, args.output, map_path)}) != 3:
                 raise FoldError("Input, output, and sidecar must be different files")
-            write(args.output, view)
+            write(args.output, view if args.legacy else view.removeprefix('#!pyfold 2\n'))
             write(map_path, json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
         elif args.command == "unfold":
             if Path(args.source).resolve() == Path(args.output).resolve():

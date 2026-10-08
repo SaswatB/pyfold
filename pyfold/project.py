@@ -39,44 +39,51 @@ def read_tree(root, suffix):
 
 
 def fragments(source, filename):
-    if source.splitlines()[:1] != [PROJECT_HEADER]:
-        raise FoldError(f'{filename}: expected {PROJECT_HEADER}')
-    tokens, index = lex(source), 0
-    found = []
-    def skip():
-        nonlocal index
-        while tokens[index].kind == 'newline' or tokens[index].text == ';':
-            index += 1
-    def take(text=None):
-        nonlocal index
-        token = tokens[index]
-        if token.kind == 'eof' or (text is not None and token.text != text):
-            raise FoldError(f'{filename}:{token.line}: expected {text or "token"}')
-        index += 1
-        return token
-    skip()
-    while tokens[index].kind != 'eof':
-        take('module')
-        token = take()
-        if token.kind != 'string':
-            raise FoldError(f'{filename}:{token.line}: expected literal module path')
-        path = module_path(ast.literal_eval(token.text))
-        take('part')
-        order = take()
-        if order.kind != 'number' or not order.text.isdecimal():
-            raise FoldError(f'{filename}:{order.line}: part must be a nonnegative integer')
-        skip()
-        opening = index
-        brace = take('{')
-        end = matching(tokens, opening)
-        body = source[brace.end:tokens[end].start].strip('\r\n')
-        # Each fragment must contain complete top-level statements. Module-level
-        # compile and val validation happen again after all fragments are assembled.
-        Parser(HEADER + '\n' + body).units()
-        found.append((path, int(order.text), body, filename))
-        index = end + 1
-        skip()
+    """Module blocks and ordinary statements coexist in every authoring file."""
+    parser = Parser(source)
+    found, implicit = [], []
+    parser.separators()
+    while parser.peek().kind != 'eof':
+        if parser.peek('module') and parser.tokens[parser.i + 1].kind == 'string':
+            parser.take('module')
+            token = parser.take()
+            path = module_path(ast.literal_eval(token.text))
+            order = 0
+            if parser.peek('part'):
+                parser.take()
+                number = parser.take()
+                if number.kind != 'number' or not number.text.isdecimal():
+                    raise FoldError(f'{filename}:{number.line}: part must be a nonnegative integer')
+                order = int(number.text)
+            parser.separators()
+            opening = parser.i
+            brace = parser.take('{')
+            end = matching(parser.tokens, opening)
+            body = source[brace.end:parser.tokens[end].start].strip('\r\n')
+            Parser(HEADER + '\n' + body).units()
+            found.append((path, order, body, filename))
+            parser.i = end + 1
+        else:
+            start = parser.peek().start
+            parser.statement()
+            end = parser.tokens[parser.i - 1].end
+            implicit.append(source[start:end])
+        if parser.peek().kind not in ('newline', 'eof') and not parser.peek(';'):
+            raise FoldError(f'{filename}:{parser.peek().line}: expected newline or semicolon')
+        parser.separators()
+    if implicit or not found:
+        if not filename.endswith('.fold'):
+            raise FoldError('Implicit module requires a .fold filename')
+        path = module_path(filename[:-5] + '.py')
+        found.append((path, 0, '\n'.join(implicit), filename))
     return found
+
+
+def has_module_blocks(source):
+    """Recognize module declarations outside strings/comments without filesystem guesses."""
+    tokens = lex(source)
+    return any(t.text == 'module' and tokens[i+1].kind == 'string'
+               for i, t in enumerate(tokens[:-1]))
 
 
 def assemble(views):
@@ -111,10 +118,8 @@ def fold_project(sources):
     views, maps = {}, {}
     for path, source in sorted(sources.items()):
         module_path(path)
-        _, sidecar = fold(source)
-        sections = [f'module {json.dumps(path)} part {i * 10} {{\n{unit["view"]}\n}}'
-                    for i, unit in enumerate(sidecar['units'])]
-        views[path[:-3] + '.fold'] = PROJECT_HEADER + '\n' + '\n\n'.join(sections) + '\n'
+        baseline, sidecar = fold(source)
+        views[path[:-3] + '.fold'] = baseline.removeprefix(HEADER + '\n')
         maps[path] = sidecar
     assemble(views)
     return views, {'kind': 'pyfold-project', 'version': 1, 'modules': maps}
@@ -196,14 +201,24 @@ def project_cli(args):
         views['project.map.json'] = json.dumps(metadata, ensure_ascii=False, indent=2) + '\n'
         write_tree(args.output, views, [args.source])
     else:
-        views = read_tree(args.source, '.fold')
+        source_path = Path(args.source)
+        views = (read_tree(source_path, '.fold') if source_path.is_dir() else
+                 {source_path.name: source_path.read_bytes().decode('utf-8')})
         if args.operation == 'unfold':
             metadata = json.loads(Path(args.map_path).read_text()) if args.map_path else None
             files = expand_project(views, metadata)
             write_tree(args.output, files, [args.source])
         elif args.operation == 'check':
-            metadata = json.loads(Path(args.map_path).read_text())
-            original = read_tree(args.against, '.py') if args.against else None
+            if not args.map_path:
+                if args.against:
+                    raise FoldError('--against requires --map')
+                original = read_tree(args.source, '.py')
+                if not original:
+                    raise FoldError('No Python files to round-trip; checking authoring files requires --map')
+                views, metadata = fold_project(original)
+            else:
+                metadata = json.loads(Path(args.map_path).read_text())
+                original = read_tree(args.against, '.py') if args.against else None
             result = check_project(views, metadata, original)
             if args.json_output:
                 print(json.dumps(result, ensure_ascii=False))

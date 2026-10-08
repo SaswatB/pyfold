@@ -13,7 +13,6 @@ Two layers:
 - `.fold.map.json`: optional original-source reconstruction data, never hidden semantics.
 
 ```text
-#!pyfold 2
 fun greet(name: str, excited: bool = false): str {
     val suffix = if (excited) "!" else "."
     return "Hello, ${name}${suffix}"
@@ -79,11 +78,12 @@ See [AUTHORING.md](AUTHORING.md) for the human/LLM workflow.
 ## Many-to-many projects
 
 One PyFold file can contain fragments from multiple Python modules, and one Python
-module can be assembled from multiple PyFold files. Module paths and numeric part
-order are explicit in the authoring files:
+module can be assembled from multiple PyFold files. Unwrapped code defaults to its
+relative filename (`app/users.fold` → `app/users.py`). Module blocks can occur in any
+file and contribute to those same modules across the input tree:
 
 ```text
-#!pyfold project 1
+#!pyfold 1
 module "app/users.py" part 10 {
     fun find_user(id) = PREFIX + str(id)
 }
@@ -93,9 +93,9 @@ module "app/orders.py" part 20 {
 ```
 
 ```sh
-python -m pyfold project fold python-src -o authoring
-python -m pyfold project check authoring --map authoring/project.map.json --against python-src --json
-python -m pyfold project unfold authoring --map authoring/project.map.json -o restored-python
+python -m pyfold fold python-src -o authoring
+python -m pyfold check authoring --map authoring/project.map.json --against python-src --json
+python -m pyfold unfold authoring --map authoring/project.map.json -o restored-python
 ```
 
 Move complete fragments between `.fold` files freely. Their module identity and
@@ -168,8 +168,7 @@ constructs remain editable in fenced `python` blocks. Python inside those blocks
 retains Python indentation rules. UTF-8 BOM and other encodings are not supported.
 
 V1 files and sidecars remain readable. `fold --legacy` emits the original `fn` syntax.
-The v2 header is required for files beginning with non-function surface statements;
-keep it on all v2 files to avoid ambiguity with legacy syntax.
+Headers are optional; new output omits them. Earlier headers remain accepted.
 
 No user-defined macros, `retry` construct, automatic temporary-name abstraction or
 loop compression are implemented yet. New representations must have explicit,

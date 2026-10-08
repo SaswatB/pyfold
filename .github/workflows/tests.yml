@@ -16,4 +16,4 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python -m pyfold check examples/original.py
       - run: python -m pyfold check examples/readable.fold --map examples/readable.fold.map.json --against examples/original.py --json
-      - run: python -m pyfold project check examples/project/views --map examples/project/project.map.json --against examples/project/python --json
+      - run: python -m pyfold check examples/project/views --map examples/project/project.map.json --against examples/project/python --json
