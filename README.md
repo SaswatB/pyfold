@@ -76,6 +76,33 @@ Character counts are informational, not an optimization objective.
 
 See [AUTHORING.md](AUTHORING.md) for the human/LLM workflow.
 
+## Many-to-many projects
+
+One PyFold file can contain fragments from multiple Python modules, and one Python
+module can be assembled from multiple PyFold files. Module paths and numeric part
+order are explicit in the authoring files:
+
+```text
+#!pyfold project 1
+module "app/users.py" part 10 {
+    fun find_user(id) = PREFIX + str(id)
+}
+module "app/orders.py" part 20 {
+    fun order_for_user(id) = find_user(id)
+}
+```
+
+```sh
+python -m pyfold project fold python-src -o authoring
+python -m pyfold project check authoring --map authoring/project.map.json --against python-src --json
+python -m pyfold project unfold authoring --map authoring/project.map.json -o restored-python
+```
+
+Move complete fragments between `.fold` files freely. Their module identity and
+part order stay fixed regardless of authoring filename. The checker validates the
+full Python path set and each module's AST/exact reconstruction. See
+[PROJECTS.md](PROJECTS.md) for commands, limits and a working many-to-many example.
+
 ## Syntax and semantics
 
 | Surface | Python expansion / contract |

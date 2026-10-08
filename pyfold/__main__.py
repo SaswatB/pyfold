@@ -35,8 +35,24 @@ def main():
     bind.add_argument('source')
     bind.add_argument('--against', required=True)
     bind.add_argument('-o', '--output', required=True)
+    project = sub.add_parser('project', help='many-to-many project translation')
+    operations = project.add_subparsers(dest='operation', required=True)
+    for name in ('fold', 'unfold', 'check', 'rebind'):
+        operation = operations.add_parser(name)
+        operation.add_argument('source', help='input directory')
+        if name != 'check':
+            operation.add_argument('-o', '--output', required=True)
+        if name in ('unfold', 'check'):
+            operation.add_argument('--map', dest='map_path', required=name == 'check')
+        if name in ('check', 'rebind'):
+            operation.add_argument('--against', required=name == 'rebind')
+        if name == 'check':
+            operation.add_argument('--json', action='store_true', dest='json_output')
     args = parser.parse_args()
     try:
+        if args.command == 'project':
+            from .project import project_cli
+            return project_cli(args)
         source = read(args.source)
         if args.command == "fold":
             view, metadata = fold(source, legacy=args.legacy)

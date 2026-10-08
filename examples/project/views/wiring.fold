@@ -1,0 +1,11 @@
+#!pyfold project 1
+module "store/__init__.py" part 0 {
+}
+
+module "store/users.py" part 0 {
+    val PREFIX = 'user:'
+}
+
+module "store/orders.py" part 0 {
+    from .users import find_user
+}

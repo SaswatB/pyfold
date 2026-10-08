@@ -39,6 +39,12 @@ Do not optimize character counts at the expense of clarity.
 
 ## Boundaries
 
+For many-to-many projects, use the `project fold/check/rebind/unfold` commands in
+[PROJECTS.md](PROJECTS.md). Move entire module fragments between authoring files;
+preserve explicit Python paths and numeric part order. Verify the complete original
+Python tree with `project check --against`, not only the module you edited. Keep
+functions/classes intact within fragments; internal splitting is not implemented.
+
 A `val` can replace a one-write `var`; it cannot silently rename a binding or
 eliminate an evaluation. An expression body can replace `{ return expression }`.
 A Kotlin conditional can replace the corresponding Python conditional expression.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyfold-lang"
-version = "0.2.0"
+version = "0.3.0"
 description = "A concise authoring view of Python with a lossless reconstruction sidecar"
 requires-python = ">=3.11"
 dependencies = []

@@ -1,0 +1,9 @@
+#!pyfold project 1
+# Group related functions together without merging their Python namespaces.
+module "store/users.py" part 10 {
+    fun find_user(id) = PREFIX + str(id)
+}
+
+module "store/orders.py" part 10 {
+    fun order_for_user(id) = {'user': find_user(id), 'status': 'pending'}
+}

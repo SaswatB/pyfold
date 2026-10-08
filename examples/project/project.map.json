@@ -1,0 +1,48 @@
+{
+  "kind": "pyfold-project",
+  "version": 1,
+  "modules": {
+    "store/__init__.py": {
+      "version": 2,
+      "source_sha256": "9af65385de6e86a120116662b5acb2f9f25a54abdb1bf1c6471f1785d0a39272",
+      "view": "#!pyfold 2\n\n",
+      "units": [
+        {
+          "id": "module",
+          "view": "",
+          "source": "# Store package.\n",
+          "leading": ""
+        }
+      ],
+      "trailing": ""
+    },
+    "store/orders.py": {
+      "version": 2,
+      "source_sha256": "562b6eed326a4d1e3d4fe066123b82ebaaa54053660d1a7cf527f72a6f177492",
+      "view": "#!pyfold 2\n    from .users import find_user\n\n    fun order_for_user(id) = {'user': find_user(id), 'status': 'pending'}\n",
+      "units": [
+        {
+          "id": "module",
+          "view": "    from .users import find_user\n\n    fun order_for_user(id) = {'user': find_user(id), 'status': 'pending'}",
+          "source": "from .users import find_user\n\n\ndef order_for_user(id):\n    return {'user': find_user(id), 'status': 'pending'}\n",
+          "leading": ""
+        }
+      ],
+      "trailing": ""
+    },
+    "store/users.py": {
+      "version": 2,
+      "source_sha256": "ae937c325b6e0774b513ad4708fadbc57506e6d4c492fc76e36ad2fd3ff5ab14",
+      "view": "#!pyfold 2\n    val PREFIX = 'user:'\n\n    fun find_user(id) = PREFIX + str(id)\n",
+      "units": [
+        {
+          "id": "module",
+          "view": "    val PREFIX = 'user:'\n\n    fun find_user(id) = PREFIX + str(id)",
+          "source": "# This global belongs to store.users even when its authoring fragment moves.\nPREFIX = 'user:'\n\n\ndef find_user(id):\n    return PREFIX + str(id)\n",
+          "leading": ""
+        }
+      ],
+      "trailing": ""
+    }
+  }
+}
