@@ -1,0 +1,20 @@
+fn active_names(users) => [user.name.strip() for user in users if user.active]
+
+fn greet(name: str, excited: bool=False) -> str {
+    let suffix = '!' if excited else '.'
+    => f'Hello, {name}{suffix}'
+}
+
+fn once(fetch, consume) {
+    let value = fetch()
+    => consume(value, value)
+}
+
+```python
+class Counter:
+    def __init__(self):
+        self.value = 0
+
+    def increment(self):
+        self.value += 1
+```

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "source_sha256": "970d418788468360cc766c6c4627c4803c46166cf64e5c919506d49e5ac4caa0",
+  "view": "fn active_names(users) => [user.name.strip() for user in users if user.active]\n\nfn greet(name: str, excited: bool=False) -> str {\n    let suffix = '!' if excited else '.'\n    => f'Hello, {name}{suffix}'\n}\n\nfn once(fetch, consume) {\n    let value = fetch()\n    => consume(value, value)\n}\n\n```python\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def increment(self):\n        self.value += 1\n```\n",
+  "units": [
+    {
+      "id": "u0",
+      "view": "fn active_names(users) => [user.name.strip() for user in users if user.active]",
+      "source": "def active_names(users):\n    return [user.name.strip() for user in users if user.active]\n",
+      "leading": "# Comments and original spelling live in the reconstruction sidecar.\n"
+    },
+    {
+      "id": "u1",
+      "view": "fn greet(name: str, excited: bool=False) -> str {\n    let suffix = '!' if excited else '.'\n    => f'Hello, {name}{suffix}'\n}",
+      "source": "def greet(name: str, excited: bool = False) -> str:\n    suffix = '!' if excited else '.'  # Keep this exact quote style on round trip.\n    return f'Hello, {name}{suffix}'\n",
+      "leading": "\n\n"
+    },
+    {
+      "id": "u2",
+      "view": "fn once(fetch, consume) {\n    let value = fetch()\n    => consume(value, value)\n}",
+      "source": "def once(fetch, consume):\n    value = fetch()\n    return consume(value, value)\n",
+      "leading": "\n\n"
+    },
+    {
+      "id": "u3",
+      "view": "```python\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def increment(self):\n        self.value += 1\n```",
+      "source": "class Counter:\n    def __init__(self):\n        self.value = 0\n\n    def increment(self):\n        self.value += 1\n",
+      "leading": "\n\n# Complex Python remains explicit and editable.\n"
+    }
+  ],
+  "trailing": ""
+}
