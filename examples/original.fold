@@ -1,20 +1,21 @@
-fn active_names(users) => [user.name.strip() for user in users if user.active]
+#!pyfold 2
+fun active_names(users) = [user.name.strip() for user in users if user.active]
 
-fn greet(name: str, excited: bool=False) -> str {
-    let suffix = '!' if excited else '.'
-    => f'Hello, {name}{suffix}'
+fun greet(name: str, excited: bool=false): str {
+    var suffix = (if (excited) '!' else '.')
+    return "Hello, ${name}${suffix}"
 }
 
-fn once(fetch, consume) {
-    let value = fetch()
-    => consume(value, value)
+fun once(fetch, consume) {
+    var value = fetch()
+    return consume(value, value)
 }
 
-```python
-class Counter:
-    def __init__(self):
+class Counter {
+    fun __init__(self) {
         self.value = 0
-
-    def increment(self):
+    }
+    fun increment(self) {
         self.value += 1
-```
+    }
+}

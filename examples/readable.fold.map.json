@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "source_sha256": "970d418788468360cc766c6c4627c4803c46166cf64e5c919506d49e5ac4caa0",
+  "view": "#!pyfold 2\n# Same Python expansion as original.py; choose clarity over minimum length.\nfun active_names(users) {\n    return [user.name.strip() for (user in users) if (user.active)]\n}\n\nfun greet(name: str, excited: bool = false): str {\n    val suffix = if (excited) \"!\" else \".\"\n    return \"Hello, ${name}${suffix}\"\n}\n\nfun once(fetch, consume) {\n    val value = fetch()\n    return consume(value, value)\n}\n\nclass Counter {\n    fun __init__(self) { self.value = 0 }\n    fun increment(self) { self.value += 1 }\n}\n",
+  "units": [
+    {
+      "id": "module",
+      "view": "# Same Python expansion as original.py; choose clarity over minimum length.\nfun active_names(users) {\n    return [user.name.strip() for (user in users) if (user.active)]\n}\n\nfun greet(name: str, excited: bool = false): str {\n    val suffix = if (excited) \"!\" else \".\"\n    return \"Hello, ${name}${suffix}\"\n}\n\nfun once(fetch, consume) {\n    val value = fetch()\n    return consume(value, value)\n}\n\nclass Counter {\n    fun __init__(self) { self.value = 0 }\n    fun increment(self) { self.value += 1 }\n}",
+      "source": "# Comments and original spelling live in the reconstruction sidecar.\ndef active_names(users):\n    return [user.name.strip() for user in users if user.active]\n\n\ndef greet(name: str, excited: bool = False) -> str:\n    suffix = '!' if excited else '.'  # Keep this exact quote style on round trip.\n    return f'Hello, {name}{suffix}'\n\n\ndef once(fetch, consume):\n    value = fetch()\n    return consume(value, value)\n\n\n# Complex Python remains explicit and editable.\nclass Counter:\n    def __init__(self):\n        self.value = 0\n\n    def increment(self):\n        self.value += 1\n",
+      "leading": ""
+    }
+  ],
+  "trailing": ""
+}

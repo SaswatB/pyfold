@@ -43,7 +43,7 @@ class RoundTrips(unittest.TestCase):
 
     def test_compact_functions(self):
         view, _ = self.check_source("def add(a, b):\n    return a + b\n")
-        self.assertEqual(view, "fn add(a, b) => a + b\n")
+        self.assertEqual(view, "#!pyfold 2\nfun add(a, b) = a + b\n")
 
     def test_edit_preserves_other_function(self):
         original = "def a(x):\n    return x + 1\n\n# exact\ndef b( y ):\n\treturn y*2 # keep\n"
@@ -79,7 +79,7 @@ class RoundTrips(unittest.TestCase):
 
     def test_stale_map_does_not_override_edit(self):
         view, metadata = fold("def f():\n    return 1\n")
-        self.assertIn("return 2", unfold(view.replace("=> 1", "=> 2"), metadata))
+        self.assertIn("return 2", unfold(view.replace("= 1", "= 2"), metadata))
 
     def test_tampered_source(self):
         view, metadata = fold("def f():\n    return 1\n")

@@ -1,0 +1,20 @@
+#!pyfold 2
+# Same Python expansion as original.py; choose clarity over minimum length.
+fun active_names(users) {
+    return [user.name.strip() for (user in users) if (user.active)]
+}
+
+fun greet(name: str, excited: bool = false): str {
+    val suffix = if (excited) "!" else "."
+    return "Hello, ${name}${suffix}"
+}
+
+fun once(fetch, consume) {
+    val value = fetch()
+    return consume(value, value)
+}
+
+class Counter {
+    fun __init__(self) { self.value = 0 }
+    fun increment(self) { self.value += 1 }
+}

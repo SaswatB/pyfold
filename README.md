@@ -1,13 +1,27 @@
 # PyFold
 
-A working experiment in **one program, two layers**:
+**Re-express Python's intent, with deterministic expansion and exact source reconstruction.**
 
-1. `.fold`: a compact, standalone authoring view with Python semantics.
-2. `.fold.map.json`: optional original source and reconstruction information.
+PyFold is a TypeScript/Kotlin-inspired authoring surface that executes as Python.
+The fast deterministic converter provides a baseline. A human or LLM can choose a
+clearer representation, then verify it against independent original Python.
+Shorter is optional; understandable and checkable are the goals.
 
-The sidecar restores presentation; it must not secretly change the program.
-This is a small prototype, not a complete TypeScript-like language or a claim
-that arbitrary Python can be safely compressed into functional expressions.
+Two layers:
+
+- `.fold`: the standalone program. Braces delimit blocks; indentation is cosmetic.
+- `.fold.map.json`: optional original-source reconstruction data, never hidden semantics.
+
+```text
+#!pyfold 2
+fun greet(name: str, excited: bool = false): str {
+    val suffix = if (excited) "!" else "."
+    return "Hello, ${name}${suffix}"
+}
+
+fun active_names(users) =
+    [user.name.strip() for (user in users) if (user.active)]
+```
 
 ## Try it
 
@@ -16,97 +30,121 @@ Python 3.11+; no runtime dependencies. Run from this checkout:
 ```sh
 python -m pyfold fold examples/original.py -o examples/original.fold
 python -m pyfold unfold examples/original.fold --map examples/original.fold.map.json -o restored.py
-python -m pyfold check examples/original.py
+python -m pyfold check examples/original.fold --map examples/original.fold.map.json --against examples/original.py --json
 python -m unittest discover -s tests -v
 ```
 
-Or install with `python -m pip install -e .` to get the `pyfold` command.
-The translator parses and compiles for validation but never executes input.
+Or `python -m pip install -e .` for the `pyfold` command. Translation parses and
+compiles for validation but never executes the input. Do not run untrusted
+programs merely to translate them.
 
-## Authoring syntax
+The converter is deterministic for fixed input, PyFold version and Python version.
+It attempts supported surface constructs and checks their expanded AST. Unsupported
+or mismatching constructs fall back to explicit fenced Python. No LLM is needed.
 
-```text
-fn active_names(users) => [user.name.strip() for user in users if user.active]
+## The authoring loop
 
-fn greet(name: str, excited: bool = False) -> str {
-    let suffix = '!' if excited else '.'
-    => f'Hello, {name}{suffix}'
-}
+1. Convert original Python with `fold`.
+2. Keep the original independent and unchanged.
+3. Edit the view to make intent clearer, using supported representations.
+4. Check the edited view with `--map` and `--against`.
+5. Optionally generate a fresh map with `rebind`.
 
-fn once(fetch, consume) {
-    let value = fetch()
-    => consume(value, value)
-}
-
-async fn resolve(task) => await task
+```sh
+python -m pyfold rebind examples/readable.fold --against examples/original.py -o readable.map.json
+python -m pyfold check examples/readable.fold --map readable.map.json --against examples/original.py --json
 ```
 
-`fn ... => expression` is a Python function returning that expression.
-Braced functions contain one simple Python statement per line. `let` is optional
-assignment sugar, not a new lexical scope; `=>` in the body means `return`.
-Function closing braces occupy their own unindented line. Expressions, types,
-keyword arguments, booleans, comprehensions and operators remain **Python**.
-There are no JavaScript runtime semantics. Top-level `//` view comments are
-non-executable and are not copied into generated Python.
+`examples/readable.fold` deliberately differs from the converter's output: it uses
+`val`, parenthesized generator clauses, alternative function bodies, and a compact
+class layout. It still expands to the original AST and reconstructs exact source.
 
-Unsupported constructs remain visible in fenced `python` blocks. The exporter
-chooses a longer fence if the source contains backticks. These blocks can be
-edited directly and may contain arbitrary Python supported by your interpreter.
-Decorated functions, classes and compound function bodies currently use this
-escape hatch. Same-line top-level statements cause whole-file fallback.
+The JSON checker reports:
 
-## Reconstruction contract
-
-| Operation | Behavior |
+| Field | Meaning |
 | --- | --- |
-| Fold, then unfold with unchanged view and sidecar | Exact original UTF-8 text, including CRLF, comments and missing final newline |
-| Unfold without a sidecar | Canonical executable Python |
-| Edit a function | Regenerate that function; preserve AST-equivalent untouched units |
-| Add, delete or reorder units | Reflect the new program; reuse matching original fragments |
-| Corrupt source checksum or inconsistent source/view in map | Reject instead of restoring different code |
+| `pair_consistent` | Valid map; standalone expansion and reconstructed Python have the same AST |
+| `original_ast_matches` | Expanded view has the same AST as the independent original |
+| `exact_reconstruction` | Reconstruction equals the original text, including line endings |
+| `ok` | All requested checks pass; process exits 0, otherwise 1 |
 
-The compiler checks each restored fragment and the edited whole module against
-the standalone view using Python AST equality. This preserves ordinary Python
-execution structure, including evaluation order, bindings and default argument
-timing. **It does not preserve tracebacks, line numbers, source inspection,
-tracing behavior, type-checker directives or every possible reflective
-observation after edits or standalone compilation.** Untouched exact round trips
-retain those original source details.
+Without `--against`, the last two checks are `null` (not checked). Pair consistency
+alone does **not** prove original preservation: two edited files can agree on the
+wrong program. `check input.py` remains available for the original converter
+round-trip check. `rebind` refuses a changed AST and never edits the original or view.
+Character counts are informational, not an optimization objective.
 
-The sidecar is deliberately redundant: it caches original source. It is not
-encryption, a security boundary, or a space-saving format. Commit it alongside
-the view if you need reconstruction. Neither file is trusted for execution.
+See [AUTHORING.md](AUTHORING.md) for the human/LLM workflow.
 
-Current matching is by AST-equivalent top-level fragments, consuming duplicates
-in order. The `id` fields are reserved bookkeeping, **not stable edit identities**.
-Leading comments follow a reused fragment; comments attached to changed/deleted
-fragments can be lost. Tail comments are retained. The prototype does not merge
-concurrent edits to Python and the view. Re-fold the authoritative Python to
-refresh the sidecar, or keep editing the view against its original sidecar.
+## Syntax and semantics
 
-## Why temporary names are not hidden yet
+| Surface | Python expansion / contract |
+| --- | --- |
+| `fun f(x): T { ... }` | `def f(x) -> T: ...` |
+| `fun f(x) = expression` | Function returning the expression; `=>` is also accepted |
+| `async fun f(x) = await x` | Python async function/coroutine |
+| `var x = value` | Ordinary Python assignment; does not add scope |
+| `val x = value` | Assignment with a conservative static no-rebinding check |
+| `if (c) { ... } else if (d) { ... } else { ... }` | Python if/elif/else |
+| `for (x in xs) { ... }`, `while (c) { ... }` | Python loops, including loop-variable scope; loop `else` supported |
+| `try { ... } catch (e: Error) { ... } finally { ... }` | Python try/except/finally; bare catch and try/else supported |
+| `with (open(path) as file) { ... }` | Python context manager |
+| `class C(Base) { ... }` | Python class; methods use `fun` and explicit `self` |
+| `throw e`, `throw e from cause`, `throw` | `raise` forms, preserving exception chaining |
+| `if (c) a else b` | Python conditional expression; parenthesize inside larger expressions |
+| `true`, `false`, `null`, `&&`, `\|\|`, `!` | Python `True`, `False`, `None`, `and`, `or`, `not` |
+| `"Hello, ${name}"` | Python f-string, preserving expression evaluation |
 
-The first slice proves standalone compilation and reversible presentation.
-It does not yet deliver the largest expected concision improvements. A binding
-such as `value = fetch()` remains explicit because it means evaluate once.
-Python also exposes binding names through `locals()`, frames and tracing.
+Statements are separated by newlines or semicolons. Braces, not indentation, define
+blocks. Multiline expressions go inside `()`, `[]` or `{}`. Use `#` line comments or
+`/* block comments */`; `//` remains Python floor division. Newly authored surface
+comments aren't copied into canonical Python. The map preserves original comments.
+Single-quoted strings are literal; unprefixed double-quoted strings support `${…}`.
+Python string prefixes are also accepted. Advanced f-string formatting may remain
+in Python f-string notation or fall back to a fenced block.
 
-The next useful step is a symbol-aware intermediate representation, with
-explicit effect/evaluation order, followed by conservative pattern compression.
-For example, an accumulator loop cannot automatically become a comprehension:
-loop variable scope, observable locals and callbacks can expose differences.
-Only patterns with a documented equivalence contract should be folded.
+Operators retain **Python precedence and behavior**, including `!a == b` meaning
+`!(a == b)`, short-circuit operand values, arbitrary-precision integers and false
+empty collections. Parenthesize explicitly if that precedence is surprising.
+Expressions, annotations, calls, defaults, dictionaries, comprehensions and imports
+otherwise retain Python grammar. Comprehension `for (x in xs)` is also accepted.
+This is not full TypeScript or Kotlin compatibility and includes no type checker.
 
-See [DESIGN.md](DESIGN.md) for the extension plan.
+`val` does not freeze objects. Its check rejects additional writes, deletion,
+shadowing in nested scopes, imports and global/nonlocal declarations of the name.
+It is deliberately conservative; use `var` for Python patterns it rejects. Dynamic
+writes via reflection/exec are not prevented. Automatic conversion emits `var`
+for bindings rather than trying to infer immutability.
 
-## Status
+## Losslessness and limits
 
-Implemented: import/export CLI, expression functions, simple braced functions,
-Python escape blocks, source-cache sidecars, partial reconstruction, AST guards,
-examples and standard-library unit tests. CI is configured for Python 3.11–3.13.
-Local validation was performed on Python 3.12.
+An unchanged pair reconstructs original UTF-8 source exactly, including comments,
+quote style, CRLF, and missing final newline. An alternate view with the **same
+whole-module AST** also reconstructs the exact original, even when its units are
+formatted or grouped differently. Ordinary semantic edits regenerate changed
+units and preserve matching original fragments where possible.
 
-Not implemented: a type checker, editor/LSP integration, stable syntax-tree
-identities, fine-grained comment merging, automatic temporary-name abstraction,
-loop compression, whole-project imports, non-UTF-8 source or a sandbox for running
-generated programs. UTF-8 BOM source is currently rejected.
+AST equality is a concrete structural contract, **not a general proof of behavioral
+equivalence**. The checker intentionally rejects behavior-preserving rewrites that
+produce different ASTs. It does not promise equivalent source inspection, tracing,
+tracebacks or type-checker behavior without original-source restoration. Sidecar
+checksums are consistency checks, not signatures or trust boundaries.
+
+Rebinding stores one whole-module reconstruction recipe. Subsequent semantic edits
+to a rebound pair can lose original comments because finer-grained matches are no
+longer available. The checker will report failed exact reconstruction. The converter
+still creates per-top-level-unit recipes. No stable node identities or concurrent
+bidirectional merge are implemented.
+
+Decorators, pattern matching, async loops/context managers, and other unsupported
+constructs remain editable in fenced `python` blocks. Python inside those blocks
+retains Python indentation rules. UTF-8 BOM and other encodings are not supported.
+
+V1 files and sidecars remain readable. `fold --legacy` emits the original `fn` syntax.
+The v2 header is required for files beginning with non-function surface statements;
+keep it on all v2 files to avoid ambiguity with legacy syntax.
+
+No user-defined macros, `retry` construct, automatic temporary-name abstraction or
+loop compression are implemented yet. New representations must have explicit,
+deterministic expansion rules; hidden sidecar code is not an acceptable substitute.
+See [DESIGN.md](DESIGN.md).

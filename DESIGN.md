@@ -1,59 +1,59 @@
 # Design notes
 
-## Core invariants
+## One program, multiple representations
 
-The visible program determines executable meaning. Sidecar removal can change
-formatting but cannot introduce a different Python AST. A sidecar is not a bag
-of code generation overrides: restoration requires AST equivalence.
+The deterministic converter selects a baseline; it does not prescribe the only
+valid view. Humans and LLMs can select different syntax/layout to clarify intent.
+Every supported representation expands through fixed compiler rules.
 
-The current pipeline is Python AST + source slices → concise view + source cache.
-The reverse path parses the view → canonical Python → optional matching source
-restoration → module validation. The untouched fast path returns exact source
-only after validating the sidecar's view/source relationship and checksum.
+V2 uses a dedicated lexer and recursive-descent statement parser. Strings, comments,
+raw blocks and delimiter nesting are lexical units. Indentation is ignored outside
+Python escape blocks. Expressions use token-aware aliases, conditional expressions
+and interpolation, then Python's AST parser validates the resulting grammar.
+This is a hybrid parser, not a full TypeScript/Kotlin expression grammar.
 
-This is a source-slice prototype, not a lossless concrete syntax tree. Changed
-functions are regenerated wholesale. A future CST layer should preserve
-unaffected tokens inside a function, rather than only top-level fragments.
+## Verification
 
-## A useful next milestone
+The visible view determines executable meaning. The sidecar contains a source cache
+and is validated before restoration. Its absence cannot secretly change the AST.
 
-1. Give bindings and expression nodes stable identities in a semantic IR.
-2. Separate semantic ordering/binding facts from presentation names/layout.
-3. Define a restricted non-reflective mode for stronger transformations.
-4. Recognize one real verbose pattern, with explicit effect restrictions.
-5. Store the original expansion as a reconstruction recipe.
-6. Reapply a recipe only when the edited IR still satisfies its preconditions.
-7. Compare execution against reference cases that observe ordering, exceptions,
-   side effects, aliasing and scope. AST equality alone will no longer suffice.
+`check view --map map --against original` separates three claims:
 
-Start with local naming abstraction before loop rewriting. A temporary can be
-displayed as a semantic binding with a short generated name while retaining its
-original spelling in the sidecar. This requires scope resolution and rejection
-or explicit treatment of locals/frame reflection. Names occurring in strings
-must never be blindly renamed. The current prototype deliberately keeps names.
+1. The pair reconstructs an AST matching standalone compilation.
+2. That AST matches independently retained original Python.
+3. Reconstruction reproduces the original source text exactly.
 
-## Losslessness has levels
+Check 1 alone cannot catch an LLM changing both halves consistently. Checks 2 and 3
+must use an independent source. AST equality deliberately rejects many potentially
+valid semantic refactors; no heuristic claim of behavioral equivalence is accepted.
 
-- Text: unchanged source plus metadata reconstructs exactly.
-- AST: source and view compile to the same ordinary Python syntax structure.
-- Observable execution: stronger and dependent on reflection/effect contracts.
-- Edit intent: cannot be guaranteed by hashing; needs node identity and merge UX.
+When whole-module ASTs match, reconstruction returns the original text after
+validation. Otherwise, source fragments are reused by AST shape, consuming duplicate
+matches in order. Changed fragments are regenerated. Source inspection, tracebacks,
+tracing and comment-based tooling are not generally invariant under regenerated
+source. Exact reconstruction restores the original source presentation.
 
-Only the first two are implemented here. Python AST equality ignores comments,
-formatting and locations. It does not prove equivalence for source inspection,
-tracing or traceback-sensitive programs. No claims of fully lossless observation
-under arbitrary edits are made.
+`rebind` accepts a new equivalent view and original Python, rejects AST changes,
+and generates a whole-module recipe. It reduces metadata-hand-editing risk at the
+cost of fine-grained preservation after later semantic edits. This tradeoff is
+explicit and tested. No stable edit identities or conflict merging are claimed.
 
-## Ownership and synchronization
+## Extending the representation vocabulary
 
-Choose one authoritative authoring file. No background bidirectional sync is
-implemented. A later editor should use a base revision plus stable IDs to detect
-conflicts instead of silently choosing between independent changes. Sidecars
-must be diffable, versioned and validated before restoration.
+The next milestone is a symbol-aware intermediate representation with explicit
+ordering and effects. A higher-level construct needs a documented deterministic
+expansion and tests for names, order, exceptions, scope and aliasing. If expansion
+can retain the original AST, the existing checker can gate it. If it changes the
+AST, it needs a separate equivalence contract; do not relabel an AST mismatch as a
+pass based on model judgment or a few passing executions.
 
-## Grammar scope
+Source presentation belongs in the map. Semantics belong in the view or an explicit
+versioned language/import definition. User-defined macros, retries and arbitrary
+expansion recipes are not implemented in this release.
 
-Headers use Python tokenization to find outer delimiters, avoiding corruption
-from dictionaries, strings, annotations and nested calls. Statements retain
-Python grammar. More surface features should move to a real lexer/parser, not
-expand into a collection of regular-expression rewrites.
+## Synchronization
+
+Choose one authoritative authoring file. Keep an immutable original for checks.
+There is no background bidirectional sync. A future editor needs base revisions and
+stable identities to merge independent changes. Current sidecars are redundant,
+diffable source caches, not compressed formats or cryptographic attestations.

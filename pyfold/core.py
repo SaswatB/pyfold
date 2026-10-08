@@ -11,6 +11,7 @@ import io
 import re
 import tokenize
 from dataclasses import dataclass
+from .syntax import HEADER, Parser, SyntaxErrorV2, emit_statement
 
 
 class FoldError(ValueError):
@@ -103,6 +104,11 @@ def _header(line: str) -> tuple[str, str, str]:
 
 
 def parse(view: str) -> list[Unit]:
+    if view.startswith(HEADER) or re.match(r'\s*(?:async\s+)?fun\s', view):
+        try:
+            return [Unit(v, p) for v, p in Parser(view).units()]
+        except (SyntaxErrorV2, SyntaxError) as exc:
+            raise FoldError(str(exc)) from exc
     lines = view.splitlines()
     units = []
     i = 0
@@ -166,7 +172,7 @@ def parse(view: str) -> list[Unit]:
     return units
 
 
-def fold(source: str) -> tuple[str, dict]:
+def fold(source: str, *, legacy: bool = False) -> tuple[str, dict]:
     """Return authoring text and JSON-serializable reconstruction data.
 
     Exact text preservation includes newline style, comments and final newline.
@@ -190,10 +196,14 @@ def fold(source: str) -> tuple[str, dict]:
                    n.end_lineno, n) for n in tree.body]
     for start, end, node in chunks:
         original = "".join(lines[start:end])
-        candidate = function_view(node)
+        try:
+            candidate = function_view(node) if legacy else emit_statement(node)
+        except (SyntaxErrorV2, TypeError, AttributeError, ValueError):
+            candidate = None
         if candidate:
             try:
-                if fingerprint(parse(candidate)[0].python) != fingerprint(original):
+                expanded = parse(candidate if legacy else HEADER + '\n' + candidate)
+                if fingerprint(''.join(u.python for u in expanded)) != fingerprint(original):
                     candidate = None
             except (FoldError, SyntaxError):
                 candidate = None
@@ -201,8 +211,8 @@ def fold(source: str) -> tuple[str, dict]:
         records.append({"id": f"u{len(records)}", "view": view,
                         "source": original, "leading": "".join(lines[cursor:start])})
         cursor = end
-    view = "\n\n".join(r["view"] for r in records) + "\n"
-    return view, {"version": 1, "source_sha256": digest(source),
+    view = ('' if legacy else HEADER + '\n') + "\n\n".join(r["view"] for r in records) + "\n"
+    return view, {"version": 1 if legacy else 2, "source_sha256": digest(source),
                   "view": view, "units": records, "trailing": "".join(lines[cursor:])}
 
 
@@ -210,7 +220,7 @@ def _validate_map(sidecar: dict) -> str:
     try:
         if not isinstance(sidecar, dict):
             raise FoldError("Sidecar must be an object")
-        if sidecar["version"] != 1:
+        if sidecar["version"] not in (1, 2):
             raise FoldError("Unsupported sidecar version")
         records = sidecar["units"]
         if not isinstance(records, list) or not all(isinstance(r, dict) for r in records):
@@ -220,12 +230,13 @@ def _validate_map(sidecar: dict) -> str:
         original = "".join(r["leading"] + r["source"] for r in records) + sidecar["trailing"]
         if digest(original) != sidecar["source_sha256"]:
             raise FoldError("Sidecar source checksum mismatch")
-        expected = "\n\n".join(r["view"] for r in records) + "\n"
+        prefix = HEADER + '\n' if sidecar['version'] == 2 else ''
+        expected = prefix + "\n\n".join(r["view"] for r in records) + "\n"
         if expected != sidecar["view"]:
             raise FoldError("Sidecar view mismatch")
         for record in records:
-            units = parse(record["view"])
-            if len(units) != 1 or fingerprint(units[0].python) != fingerprint(record["source"]):
+            units = parse(prefix + record["view"])
+            if fingerprint(''.join(u.python for u in units)) != fingerprint(record["source"]):
                 raise FoldError("Sidecar would change program semantics")
         fingerprint(original)
         return original
@@ -241,11 +252,16 @@ def unfold(view: str, sidecar: dict | None = None) -> str:
     move/drop attached comments; this prototype does not claim stable tree IDs.
     """
     units = parse(view)
+    canonical = '\n'.join(unit.python for unit in units)
+    try:
+        compile(canonical, '<pyfold>', 'exec')
+    except SyntaxError as exc:
+        raise FoldError(f'Invalid compiled program: {exc.msg}') from exc
     if sidecar is None:
         result = "\n".join(unit.python for unit in units)
     else:
         original = _validate_map(sidecar)
-        if view == sidecar["view"]:
+        if fingerprint(canonical) == fingerprint(original):
             return original
         remaining = list(sidecar["units"])
         pieces = []
